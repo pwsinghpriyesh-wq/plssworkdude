@@ -1,0 +1,67 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "font/misc/globe.png",
+      "height": 12,
+      "ascent": 12,
+      "chars": ["\uF000"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/overall.png",
+      "height": 12,
+      "ascent": 12,
+      "chars": ["\uF001"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/cycle.png",
+      "height": 7,
+      "ascent": 7,
+      "chars": ["\uF002"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/icons.png",
+      "height": 14,
+      "ascent": 11,
+      "chars": ["\uF004"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/icons_disabled.png",
+      "height": 14,
+      "ascent": 11,
+      "chars": ["\uF005"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/tab.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": ["\uF006"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/tab_disabled.png",
+      "height": 9,
+      "ascent": 8,
+      "chars": ["\uF007"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/chat.png",
+      "height": 15,
+      "ascent": 11,
+      "chars": ["\uF008"]
+    },
+    {
+      "type": "bitmap",
+      "file": "font/misc/chat_disabled.png",
+      "height": 15,
+      "ascent": 11,
+      "chars": ["\uF009"]
+    }
+  ]
+}

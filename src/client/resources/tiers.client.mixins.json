@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "com.tiers.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AddRenderedPlayersClientMixin",
+    "ModifyNametagsClientMixin",
+    "ModifyTextDisplaysClientMixin",
+    "ModifyTabClientMixin",
+    "ModifyChatClientMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
