@@ -17,27 +17,40 @@ public class WebsiteApiClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(WebsiteApiClient.class);
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
     
-    private String apiUrl = "https://portal-tiers.netlify.app/api";
+    // CRITICAL FIX: Use backend API, NOT the Netlify frontend page
+    // The frontend URL (portal-tiers.netlify.app) returns HTML, not JSON
+    // This MUST be set by user to point to actual backend serving JSON
+    private String apiUrl = "https://api.portal-tiers.example.com";
     private static final Map<String, CachedProfile> CACHE = new HashMap<>();
     private static final long CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
     
-    public WebsiteApiClient() {}
+    public WebsiteApiClient() {
+        LOGGER.warn("[Tiers] WebsiteApiClient initialized with default URL: {}", apiUrl);
+    }
     
     public WebsiteApiClient(String apiUrl) {
         this.apiUrl = apiUrl;
+        LOGGER.info("[Tiers] WebsiteApiClient initialized with URL: {}", apiUrl);
     }
     
     /**
      * Fetch player tiers by UUID (for premium players)
+     * MUST call backend API, never HTML page
      */
     public CompletableFuture<PlayerTierData> fetchPlayerTiers(String uuid) {
+        if (uuid == null || uuid.isEmpty()) {
+            LOGGER.error("[Tiers] UUID is null or empty");
+            return CompletableFuture.completedFuture(null);
+        }
+        
         // Check cache first
         if (CACHE.containsKey(uuid)) {
             CachedProfile cached = CACHE.get(uuid);
             if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
-                LOGGER.info("Using cached data for UUID: {}", uuid);
+                LOGGER.info("[Tiers] Using cached data for UUID: {}", uuid);
                 return CompletableFuture.completedFuture(cached.data);
             } else {
+                LOGGER.info("[Tiers] Cache expired for UUID: {}, refreshing...", uuid);
                 CACHE.remove(uuid);
             }
         }
@@ -45,7 +58,7 @@ public class WebsiteApiClient {
         return fetchFromApi("uuid/" + uuid).thenApply(data -> {
             if (data != null) {
                 CACHE.put(uuid, new CachedProfile(data, System.currentTimeMillis()));
-                LOGGER.info("Cached player data for UUID: {}", uuid);
+                LOGGER.info("[Tiers] Cached player data for UUID: {}", uuid);
             }
             return data;
         });
@@ -55,15 +68,21 @@ public class WebsiteApiClient {
      * Fetch player tiers by username (for cracked players)
      */
     public CompletableFuture<PlayerTierData> fetchPlayerTiersByUsername(String username) {
+        if (username == null || username.isEmpty()) {
+            LOGGER.error("[Tiers] Username is null or empty");
+            return CompletableFuture.completedFuture(null);
+        }
+        
         // Check cache first (use lowercase for consistency)
         String cacheKey = "username:" + username.toLowerCase();
         
         if (CACHE.containsKey(cacheKey)) {
             CachedProfile cached = CACHE.get(cacheKey);
             if (System.currentTimeMillis() - cached.timestamp < CACHE_DURATION) {
-                LOGGER.info("Using cached data for username: {}", username);
+                LOGGER.info("[Tiers] Using cached data for username: {}", username);
                 return CompletableFuture.completedFuture(cached.data);
             } else {
+                LOGGER.info("[Tiers] Cache expired for username: {}, refreshing...", username);
                 CACHE.remove(cacheKey);
             }
         }
@@ -71,7 +90,7 @@ public class WebsiteApiClient {
         return fetchFromApi("username/" + username).thenApply(data -> {
             if (data != null) {
                 CACHE.put(cacheKey, new CachedProfile(data, System.currentTimeMillis()));
-                LOGGER.info("Cached player data for username: {}", username);
+                LOGGER.info("[Tiers] Cached player data for username: {}", username);
             }
             return data;
         });
@@ -79,40 +98,61 @@ public class WebsiteApiClient {
     
     /**
      * Internal method to fetch from API
+     * CRITICAL: Proper error logging before and after request
      */
     private CompletableFuture<PlayerTierData> fetchFromApi(String endpoint) {
         String url = apiUrl + "/player/" + endpoint;
         
+        LOGGER.info("[Tiers] ========== TIER REQUEST START ==========");
+        LOGGER.info("[Tiers] Fetching player data from URL: {}", url);
+        
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("User-Agent", "Tiers-Mod")
+                .header("User-Agent", "Tiers-Mod/1.0")
+                .timeout(java.time.Duration.ofSeconds(10))
                 .GET()
                 .build();
         
-        LOGGER.info("Fetching player data from: {}", url);
-        
         return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
+                    LOGGER.info("[Tiers] HTTP Response Code: {}", response.statusCode());
+                    
                     try {
                         if (response.statusCode() == 200) {
-                            return parseResponse(response.body());
+                            String body = response.body();
+                            LOGGER.info("[Tiers] Response body length: {} chars", body.length());
+                            LOGGER.debug("[Tiers] Response body (first 500 chars): {}", 
+                                body.length() > 500 ? body.substring(0, 500) : body);
+                            
+                            PlayerTierData parsed = parseResponse(body);
+                            if (parsed != null) {
+                                LOGGER.info("[Tiers] Successfully parsed tier data");
+                            } else {
+                                LOGGER.error("[Tiers] Failed to parse response - null result");
+                            }
+                            return parsed;
                         } else {
-                            LOGGER.warn("API returned status {}: {}", response.statusCode(), response.body());
+                            LOGGER.warn("[Tiers] API returned non-200 status: {}", response.statusCode());
+                            LOGGER.warn("[Tiers] Response body: {}", response.body());
                             return null;
                         }
                     } catch (Exception e) {
-                        LOGGER.error("Error parsing API response", e);
+                        LOGGER.error("[Tiers] Error parsing API response", e);
                         return null;
+                    } finally {
+                        LOGGER.info("[Tiers] ========== TIER REQUEST END ==========");
                     }
                 })
                 .exceptionally(e -> {
-                    LOGGER.error("Error fetching player tiers from API", e);
+                    LOGGER.error("[Tiers] Network error fetching player tiers from API: {}", e.getMessage(), e);
+                    LOGGER.info("[Tiers] ========== TIER REQUEST END (ERROR) ==========");
                     return null;
                 });
     }
     
     /**
      * Parse JSON response from API
+     * Expects format: {"username":"name","uuid":"uuid","sword":"HT1","axe":"LT2","mace":"Unranked","uhc":"HT3"}
      */
     private PlayerTierData parseResponse(String jsonBody) {
         try {
@@ -125,10 +165,12 @@ public class WebsiteApiClient {
             String mace = json.has("mace") ? json.get("mace").getAsString() : "Unranked";
             String uhc = json.has("uhc") ? json.get("uhc").getAsString() : "Unranked";
             
-            LOGGER.info("Successfully parsed tier data for: {}", username);
+            LOGGER.info("[Tiers] Parsed tier data - Player: {}, Sword: {}, Axe: {}, Mace: {}, UHC: {}", 
+                username, sword, axe, mace, uhc);
+            
             return new PlayerTierData(username, uuid, sword, axe, mace, uhc);
         } catch (Exception e) {
-            LOGGER.error("Failed to parse tier data", e);
+            LOGGER.error("[Tiers] Failed to parse tier data from JSON: {}", e.getMessage(), e);
             return null;
         }
     }
@@ -138,15 +180,15 @@ public class WebsiteApiClient {
      */
     public void clearCache() {
         CACHE.clear();
-        LOGGER.info("Cleared player cache");
+        LOGGER.info("[Tiers] Cleared player cache");
     }
     
     /**
-     * Update API URL
+     * Update API URL at runtime
      */
     public void setApiUrl(String newUrl) {
         this.apiUrl = newUrl;
-        LOGGER.info("API URL updated to: {}", newUrl);
+        LOGGER.warn("[Tiers] API URL updated to: {}", newUrl);
     }
     
     /**
